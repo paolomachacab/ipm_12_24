@@ -1,201 +1,232 @@
-**************************************************************
-* ÍNDICE DE POBREZA MULTIDIMENSIONAL (IPM) - BOLIVIA 2012
-**************************************************************
+********************************************************************************
+***** SDSN 2025 - CENSO 2012
+********************************************************************************
 
 clear all
 set more off
 version 17.0
 set maxvar 32767
 
-**************************************************************
-* 1. CONFIGURACIÓN DE ENTORNO Y RUTAS
-**************************************************************
+********************************************************************************
+* 1️. CONFIGURACIÓN DE RUTAS GLOBALES
+********************************************************************************
 
-* Definir ruta principal (carpeta local de trabajo)
-global path "C:\Users\`c(username)'\Desktop\censo_2012"
+* La ruta se ajusta automáticamente al usuario que ejecuta el código
+global path "C:\Users\PAOLO\Desktop\censo_2012"
 
-* Crear carpeta si no existe
-cap mkdir "$path"
-cd "$path"
+* Directorios
+global in  "$path"
+global out "$path\_out"
+global code "$path\_code"
+global tbl "$path\_tbl"
 
-display "Carpeta de trabajo: $path"
+* Crear carpetas si no existen
+cap mkdir "$out"
+cap mkdir "$code"
+cap mkdir "$tbl"
 
-**************************************************************
-* 2. IMPORTACIÓN DE BASES CSV ORIGINALES
-**************************************************************
+display "Ruta principal definida: $path"
 
-* Importar PERSONA
-capture confirm file "$path\PERSONA.csv"
+********************************************************************************
+* 2️. IMPORTAR BASE PERSONA
+********************************************************************************
+
+capture confirm file "$in\PERSONA.csv"
 if _rc == 0 {
-    import delimited "$path\PERSONA.csv", clear varnames(1) encoding(UTF-8)
+    import delimited "$in\PERSONA.csv", clear varnames(1) encoding(UTF-8)
     compress
     save "$path\persona_2012.dta", replace
-    display "Base PERSONA cargada y guardada correctamente."
+    display "Base PERSONA importada y guardada correctamente."
 }
 else {
     di as error "No se encontró el archivo PERSONA.csv en $path"
     exit
 }
 
-* Importar VIVIENDA
-capture confirm file "$path\VIVIENDA.csv"
+********************************************************************************
+* 3️. IMPORTAR BASE VIVIENDA
+********************************************************************************
+
+capture confirm file "$in\VIVIENDA.csv"
 if _rc == 0 {
-    import delimited "$path\VIVIENDA.csv", clear varnames(1) encoding(UTF-8)
+    import delimited "$in\VIVIENDA.csv", clear varnames(1) encoding(UTF-8)
     compress
     save "$path\vivienda_2012.dta", replace
-    display "Base VIVIENDA cargada y guardada correctamente."
+    display "Base VIVIENDA importada y guardada correctamente."
 }
 else {
     di as error "No se encontró el archivo VIVIENDA.csv en $path"
     exit
 }
 
-**************************************************************
-* 3. UNIÓN DE BASES PERSONA + VIVIENDA
-**************************************************************
+********************************************************************************
+* 4UNIÓN DE BASES: PERSONA (m) : VIVIENDA (1)
+********************************************************************************
 
 use "$path\persona_2012.dta", clear
 merge m:1 vivienda_ref_id using "$path\vivienda_2012.dta"
 
 tab _merge
+
 /*
-Interpretación:
-  _merge == 3 → coincidencia en ambas bases (lo que necesitamos)
-  _merge == 1 → personas sin vivienda
-  _merge == 2 → viviendas sin personas (desocupadas)
+Interpretación de _merge:
+    1 → Personas sin vivienda asociada
+    2 → Viviendas sin personas (desocupadas)
+    3 → Coincidencia correcta (personas dentro de viviendas particulares)
 */
+
+*merge m:1 vivienda_ref_id using "$path\vivienda_2012.dta"
+
+ *   Result                      Number of obs
+  *  -----------------------------------------
+   * Not matched                       321,186
+   *     from master                         0  (_merge==1)
+   *     from using                    321,186  (_merge==2)
+
+   * Matched                        10,059,856  (_merge==3)
+    *-----------------------------------------
+
+*
+* tab _merge
+
+ *  Matching result from |
+  *                merge |      Freq.     Percent        Cum.
+*------------------------+-----------------------------------
+ *        Using only (2) |    321,186        3.09        3.09
+ *           Matched (3) | 10,059,856       96.91      100.00
+*------------------------+-----------------------------------
+ *                 Total | 10,381,042      100.00
+
 
 keep if _merge == 3
 drop _merge
 
-compress
-save "$path\censo_2012.dta", replace
-display "Unión completada exitosamente: censo_2012.dta creada en $path"
+* Según variable p01: tipos 1–5 son viviendas particulares
 
-**************************************************************
-* 4. CREACIÓN DE LAS 9 PRIVACIONES DEL IPM
-**************************************************************
+keep if inrange(p01,1,5)
 
-use "$path\censo_2012.dta", clear
-
-**************************************************************
-* DIMENSIÓN 1: PODER Y VOZ
-**************************************************************
-
-*-------------------------------------------------------------*
-* 1. Documento de identidad: personas ≥6 años sin carnet
-*-------------------------------------------------------------*
-gen sin_carnet_ind = .
-replace sin_carnet_ind = 1 if p25 >= 6 & p27 == 2
-replace sin_carnet_ind = 0 if p25 >= 6 & p27 == 1
-replace sin_carnet_ind = . if inlist(p27,0,9)
-bys vivienda_ref_id: egen sin_carnet_hogar = max(sin_carnet_ind)
-label var sin_carnet_hogar "Privación: sin documento de identidad (hogar)"
-
-*-------------------------------------------------------------*
-* 2. Analfabetismo: personas ≥15 años que no saben leer
-*-------------------------------------------------------------*
-gen analfabetismo_a = .
-replace analfabetismo_a = 1 if p25 >= 15 & p35 == 2
-replace analfabetismo_a = 0 if p25 >= 15 & p35 == 1
-replace analfabetismo_a = . if inlist(p35,0,9)
-bys vivienda_ref_id: egen analfabetismo_hogar_a = max(analfabetismo_a)
-label var analfabetismo_hogar_a "Privación: analfabetismo (A, 0 y 9 missing)"
-
-gen analfabetismo_b = .
-replace analfabetismo_b = 1 if p25 >= 15 & inlist(p35,2,9)
-replace analfabetismo_b = 0 if p25 >= 15 & p35 == 1
-replace analfabetismo_b = . if p35 == 0
-bys vivienda_ref_id: egen analfabetismo_hogar_b = max(analfabetismo_b)
-label var analfabetismo_hogar_b "Privación: analfabetismo (B, 9 = no sabe, 0 missing)"
-
-*-------------------------------------------------------------*
-* 3. Comunicación: hogar sin teléfono fijo ni celular
-*-------------------------------------------------------------*
-gen comunicacion_hogar = .
-replace comunicacion_hogar = 1 if p17e == 2
-replace comunicacion_hogar = 0 if p17e == 1
-replace comunicacion_hogar = . if inlist(p17e,0,9)
-label var comunicacion_hogar "Privación: sin teléfono fijo ni celular"
-
-**************************************************************
-* DIMENSIÓN 2: RECURSOS
-**************************************************************
-
-*-------------------------------------------------------------*
-* 4. Agua potable: hogar sin agua potable
-*-------------------------------------------------------------*
-gen priv_agua_potable = .
-replace priv_agua_potable = 1 if inlist(p07,5,6,7)
-replace priv_agua_potable = 0 if inlist(p07,1,2,3,4)
-replace priv_agua_potable = . if inlist(p07,0,9)
-label var priv_agua_potable "Privación: hogar sin agua potable"
-
-*-------------------------------------------------------------*
-* 5. Electricidad: hogar sin electricidad
-*-------------------------------------------------------------*
-gen priv_electricidad = .
-replace priv_electricidad = 1 if inlist(p11,4,5)
-replace priv_electricidad = 0 if inlist(p11,1,2,3)
-replace priv_electricidad = . if inlist(p11,0,9)
-label var priv_electricidad "Privación: hogar sin electricidad"
-
-*-------------------------------------------------------------*
-* 6. Saneamiento básico: hogar sin baño o sin desagüe adecuado
-*-------------------------------------------------------------*
-gen priv_saneamiento = .
-replace priv_saneamiento = 1 if p09 == 3
-replace priv_saneamiento = 0 if inlist(p09,1,2)
-replace priv_saneamiento = . if inlist(p09,0,9)
-label var priv_saneamiento "Privación: hogar sin saneamiento básico"
-
-**************************************************************
-* DIMENSIÓN 3: OPORTUNIDADES Y ELECCIÓN
-**************************************************************
-
-*-------------------------------------------------------------*
-* 7. Salud: parto no atendido en centro de salud
-*-------------------------------------------------------------*
-gen parto_no_salud_ind = .
-replace parto_no_salud_ind = 1 if inlist(p49b,2,3)
-replace parto_no_salud_ind = 0 if p49b == 1
-replace parto_no_salud_ind = . if inlist(p49b,0,9)
-bys vivienda_ref_id: egen parto_no_salud_hogar = max(parto_no_salud_ind)
-label var parto_no_salud_hogar "Privación: parto fuera de centro de salud"
-
-*-------------------------------------------------------------*
-* 8. Embarazo adolescente: al menos un embarazo 15–19 años
-*-------------------------------------------------------------*
-gen embarazo_adolescente_ind = .
-replace embarazo_adolescente_ind = 1 if p25 >= 15 & p25 <= 19 & p46 > 0
-replace embarazo_adolescente_ind = 0 if p25 >= 15 & p25 <= 19 & p46 == 0
-replace embarazo_adolescente_ind = . if inlist(p46,0,9)
-bys vivienda_ref_id: egen embarazo_adolescente_hogar = max(embarazo_adolescente_ind)
-label var embarazo_adolescente_hogar "Privación: embarazo adolescente (hogar)"
-
-*-------------------------------------------------------------*
-* 9. Educación: niño/a 6–19 años que no asiste a la escuela
-*-------------------------------------------------------------*
-gen sin_asistencia_ind = .
-replace sin_asistencia_ind = 1 if p25 >= 6 & p25 <= 19 & p36 == 4
-replace sin_asistencia_ind = 0 if p25 >= 6 & p25 <= 19 & inlist(p36,1,2,3)
-replace sin_asistencia_ind = . if inlist(p36,0,9)
-bys vivienda_ref_id: egen sin_asistencia_hogar = max(sin_asistencia_ind)
-label var sin_asistencia_hogar "Privación: niño/a 6–19 años no asiste (hogar)"
-
-**************************************************************
-* REORDENAR Y GUARDAR BASE FINAL
-**************************************************************
-
-order munic_ref_id urbrur vivienda_ref_id ///
-      sin_carnet_hogar analfabetismo_hogar_a analfabetismo_hogar_b comunicacion_hogar ///
-      priv_agua_potable priv_electricidad priv_saneamiento ///
-      parto_no_salud_hogar embarazo_adolescente_hogar sin_asistencia_hogar
+********************************************************************************
+* 6️. GUARDAR BASE UNIFICADA FINAL
+********************************************************************************
 
 compress
-save "$path\censo_2012_privaciones.dta", replace
-display "Base con las 9 privaciones (0 y 9 = missing) guardada correctamente en $path"
+save "$path\censo_2012_unido.dta", replace
+display "✅ Base unificada guardada correctamente como censo_2012_unido.dta en $path"
 
+********************************************************************************
+* JEFE DE HOGAR POR SEXO
+********************************************************************************
+cap drop jefe_sexo
+gen jefe_sexo = .
+replace jefe_sexo = 1 if p23 == 1 & p24 == 1   // Jefa de hogar (mujer)
+replace jefe_sexo = 0 if p23 == 1 & p24 == 2   // Jefe de hogar (hombre)
+
+cap drop jefe_hogar
+bys vivienda_ref_id: egen jefe_hogar = max(jefe_sexo)
+
+label var jefe_hogar "Sexo del jefe/a del hogar (1=Mujer, 0=Hombre)"
+label define jefe_lbl 0 "Hombre" 1 "Mujer"
+label values jefe_hogar jefe_lbl
+
+tab jefe_hogar, missing
+
+
+*tab jefe_hogar, missing
+
+ *  Sexo del |
+ *jefe/a del |
+ *     hogar |
+ * (1=Mujer, |
+ * 0=Hombre) |      Freq.     Percent        Cum.
+*------------+-----------------------------------
+ *    Hombre |  6,634,409       67.51       67.51
+  *    Mujer |  3,155,610       32.11       99.62
+   *       . |     37,070        0.38      100.00
+*------------+-----------------------------------
+ *     Total |  9,827,089      100.00
+
+
+********************************************************************************
+* JEFE DE HOGAR INDÍGENA
+********************************************************************************
+cap drop jefe_indigena
+gen jefe_indigena = .
+replace jefe_indigena = 1 if p23 == 1 & p29 == 1   // Jefe/a se autoidentifica como indígena
+replace jefe_indigena = 0 if p23 == 1 & p29 == 2   // Jefe/a no indígena
+
+cap drop jefe_indigena_v
+bys vivienda_ref_id: egen jefe_indigena_v = max(jefe_indigena)
+
+label var jefe_indigena_v "Jefe/a del hogar indígena (1=Sí, 0=No)"
+label define indigena_lbl 0 "No indígena" 1 "Indígena"
+label values jefe_indigena_v indigena_lbl
+
+tab jefe_indigena_v, missing
+
+*tab jefe_indigena_v, missing
+
+ *Jefe/a del |
+  *    hogar |
+   *indígena |
+    * (1=Sí, |
+     * 0=No) |      Freq.     Percent        Cum.
+*------------+-----------------------------------
+*No indígena |  2,123,553       21.61       21.61
+ *  Indígena |  1,887,139       19.20       40.81
+  *        . |  5,816,397       59.19      100.00
+*------------+-----------------------------------
+ *     Total |  9,827,089      100.00
+
+
+********************************************************************************
+* JEFE DE HOGAR INDÍGENA POR SEXO
+********************************************************************************
+cap drop jefe_indigena_s
+gen jefe_indigena_s = .
+replace jefe_indigena_s = 1 if p23 == 1 & p29 == 1 & p24 == 1   // Mujer indígena
+replace jefe_indigena_s = 0 if p23 == 1 & p29 == 1 & p24 == 2   // Hombre indígena
+
+cap drop jefe_indigena_s_v
+bys vivienda_ref_id: egen jefe_indigena_s_v = max(jefe_indigena_s)
+
+label var jefe_indigena_s_v "Sexo del jefe indígena (1=Mujer, 0=Hombre)"
+label values jefe_indigena_s_v jefe_lbl
+
+tab jefe_indigena_s_v, missing
+
+********************************************************************************
+* JEFE DE HOGAR NO INDÍGENA POR SEXO
+********************************************************************************
+cap drop jefe_no_indigena
+gen jefe_no_indigena = .
+replace jefe_no_indigena = 1 if p23 == 1 & p29 == 2 & p24 == 1   // Mujer no indígena
+replace jefe_no_indigena = 0 if p23 == 1 & p29 == 2 & p24 == 2   // Hombre no indígena
+
+cap drop jefe_no_indigena_v
+bys vivienda_ref_id: egen jefe_no_indigena_v = max(jefe_no_indigena)
+
+label var jefe_no_indigena_v "Sexo del jefe no indígena (1=Mujer, 0=Hombre)"
+label values jefe_no_indigena_v jefe_lbl
+
+tab jefe_no_indigena_v, missing
+
+********************************************************************************
+* HOGAR CON AL MENOS UNA PERSONA CON DISCAPACIDAD
+********************************************************************************
+cap drop discapacitado
+gen discapacitado = .
+replace discapacitado = 1 if p22 == 1   // Hay persona con dificultad permanente
+replace discapacitado = 0 if p22 == 2   // Ninguna persona con dificultad
+
+cap drop discapacitado_v
+bys vivienda_ref_id: egen discapacitado_v = max(discapacitado)
+
+label var discapacitado_v "Hogar con al menos una persona con discapacidad (1=Sí, 0=No)"
+label define disc_lbl 0 "Sin discapacidad" 1 "Con discapacidad"
+label values discapacitado_v disc_lbl
+
+tab discapacitado_v, missing
 **************************************************************
 * FIN DEL SCRIPT
 **************************************************************
+
