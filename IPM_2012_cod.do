@@ -83,7 +83,7 @@ gen sin_carnet_ind = .
 replace sin_carnet_ind = 1 if P25_EDAD>=6 & P27_CARNET==2
 replace sin_carnet_ind = 0 if P25_EDAD>=6 & P27_CARNET==1
 replace sin_carnet_ind = 0 if P25_EDAD<6
-cap drop sin_asistencia_hogar
+cap drop sin_carnet_hogar
 bys I_BC_VIV: egen sin_carnet_hogar = max(sin_carnet_ind)
 label var sin_carnet_hogar "Privación en documento de identidad (1=privado)"
 
