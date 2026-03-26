@@ -603,34 +603,6 @@ label values saneamiento priv_label
 
 tab saneamiento, m 
 
-*******************************************************************************
-* NORMALIZACIÓN DE VARIABLES GEOGRÁFICAS (POR SI SON STRING)
-*******************************************************************************
-
-capture confirm numeric variable MUN
-if _rc {
-    destring MUN, replace ignore(" ")
-}
-capture confirm numeric variable I02_DEPTO
-if _rc {
-    destring I02_DEPTO, replace ignore(" ")
-}
-capture confirm numeric variable I03_PROV
-if _rc {
-    destring I03_PROV, replace ignore(" ")
-}
-capture confirm numeric variable URBRUR_P
-if _rc {
-    destring URBRUR_P, replace ignore(" ")
-}
-capture confirm numeric variable I00_FOLIO 
-if _rc {
-    destring I00_FOLIO, replace ignore(" ")
-}
-capture confirm numeric variable I_BC_VIV
-if _rc {
-    destring I_BC_VIV, replace ignore(" ")
-}
 
 *******************************************************************************
 * COLAPSAR A NIVEL HOGAR
@@ -650,7 +622,7 @@ collapse (max) ///
     I03_PROV ///
 	URBRUR ///
     URBRUR_P ///
-    MUN, ///
+    ID_INE_CENSO_MUN, ///
     by(I_BC_VIV)
 	
 *-----------------------------------------------------------*
@@ -661,7 +633,7 @@ order con_analfabeto_2012 sin_carnet_2012 sin_telefono_2012 ///
       sin_acceso_a_salud_2012 embarazo_adolescente_2012 ///
       con_no_estudia_2012 sin_agua_potable_2012 ///
       sin_electricidad_2012 sin_saneamiento_2012 ///
-      mun_cod urbrur dep_res_cod prov_cod I_BC_VIV URBRUR_P
+      mun_cod urbrur dep_res_cod prov_cod ID_INE_CENSO_MUN URBRUR_P
 
 save "$out\base_vivienda_collapse_2012.dta", replace
 
