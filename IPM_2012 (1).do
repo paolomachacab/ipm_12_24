@@ -186,9 +186,7 @@ gen analfabetismo_ind = .
 replace analfabetismo_ind = 1 if P25_EDAD>=15 & inlist(P35_LEER,2)
 replace analfabetismo_ind = 0 if P25_EDAD>=15 & P35_LEER==1
 replace analfabetismo_ind = 0 if P25_EDAD <15
-replace analfabetismo_ind = 0 if P25_EDAD < 15 & P35_LEER == 1
-replace analfabetismo_ind = 0 if P25_EDAD < 15 & P35_LEER == 0
-replace analfabetismo_ind = 0 if P25_EDAD < 15 & P35_LEER == 2
+
 
 cap drop analfabetismo_hogar
 bys I_BC_VIV: egen analfabetismo_hogar = max(analfabetismo_ind)
