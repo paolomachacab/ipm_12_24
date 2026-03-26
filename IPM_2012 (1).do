@@ -311,6 +311,10 @@ replace parto_no_salud_ind = 1 if P24_SEXO==1 ///
     & inrange(P25_EDAD,15,59) ///
     & ult5años == 1 ///
     & inlist(P49B_LUGARPARTO,2,3)
+
+* ERROR: Este replace tiene las mismas condiciones que el anterior,
+* por lo que sobreescribe el valor 1 recién asignado con 0.
+* Resultado: parto_no_salud_ind nunca toma el valor 1.
 	
 replace parto_no_salud_ind = 0 if P24_SEXO==1 ///
     & inrange(P25_EDAD,15,59) ///
